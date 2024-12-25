@@ -16,7 +16,7 @@ from copy import deepcopy
 import time
 import tracemalloc
 from llama_cpp import Llama
-
+import subprocess
 
 device = 'cuda:3'
 
@@ -26,14 +26,6 @@ def get_timers():
         'start' : torch.cuda.Event(enable_timing=True),
         'end' : torch.cuda.Event(enable_timing=True)
     }
-
-# @contextmanager
-# def timer():
-    # 
-    # start.record()
-    # yield  
-    # 
-    # return t
 
 class timer:
     """
@@ -128,12 +120,41 @@ def test_kv_cache(model, tokenizer, num_iters=10, text='Hello, my name is: ', ti
 
     return res
 
-def test_llama_cpp(model, tokenizer, expos, text='Hello, my name is: '):
+def test_llama_cpp(num_iters=10, text='Hello, my name is: '):
 
+    if not os.path.exists('./gpt2-large.Q6_K.gguf'):
+        print('Loading model')
+        subprocess.run(['wget', 'https://huggingface.co/RichardErkhov/openai-community_-_gpt2-large-gguf/resolve/main/gpt2-large.Q6_K.gguf'])
+    
     llm = Llama(
-        model_path="gguf/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
-        chat_format="llama-3"
+        # model_path="gguf/Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+        model_path="./gpt2-large.Q6_K.gguf",
+        main_gpu=int(device[-1]),
+        # chat_format="llama-3"
     )
+    with timer('time') as t:
+        output = llm(
+            text, # Prompt
+            max_tokens=num_iters, # Generate up to 32 tokens, set to None to generate up to the end of the context window
+            # stop=["Q:", "\n"], # Stop generating just before the model would generate a new question
+            echo=True # Echo the prompt back in the output
+        ) # Generate a completion, can also call create_completion
+
+    # llama = Llama("models/ggml-7b.bin")
+    # >>> tokens = llama.tokenize(b"Hello, world!")
+    # >>> for token in llama.generate(tokens, top_k=40, top_p=0.95, temp=1.0, repeat_penalty=1.0):
+    # ...     print(llama.detokenize([token]))
+
+    res = {}
+    res['llama_cpp'] = {
+        'text_generated' : output['choices'][0]['text'],
+        'elapsed_time' : t.elapsed_time,
+        'input_text' : text,
+        'ram_memory' : t.elapsed_memory,
+        'gpu_memory' : t.gpu_memory
+    }
+    
+    return res
 
 def test_vllm(model, tokenizer,):
     pass
